@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>WH iOS Camera</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+  margin: 0;
+  background: black;
+  overflow: hidden;
+}
+video, canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+button {
+  position: fixed;
+  z-index: 10;
+  padding: 10px 14px;
+  font-size: 16px;
+}
+#start { top: 20px; left: 20px; }
+#switch { top: 20px; right: 20px; }
+#save { bottom: 20px; left: 20px; }
+</style>
+</head>
+
+<body>
+
+<button id="start">▶ Камера</button>
+<button id="switch">🔁</button>
+<button id="save">💾</button>
+
+<video id="video" playsinline></video>
+<canvas id="canvas"></canvas>
+
+<audio id="beep">
+  <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg">
+</audio>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const beep = document.getElementById('beep');
+
+let facing = "user";
+let lastFace = null;
+let textX = 0, textY = 0;
+
+// КАМЕРА
+async function startCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: facing }
+  });
+  video.srcObject = stream;
+  await video.play();
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+}
+
+// ПЕРЕКЛЮЧЕНИЕ
+document.getElementById('switch').onclick = () => {
+  facing = facing === "user" ? "environment" : "user";
+  startCamera();
+};
+
+// СОХРАНЕНИЕ
+document.getElementById('save').onclick = () => {
+  const link = document.createElement('a');
+  link.download = 'wh.png';
+  link.href = canvas.toDataURL();
+  link.click();
+};
+
+// FACE MESH
+const faceMesh = new FaceMesh({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+});
+faceMesh.setOptions({ maxNumFaces: 1 });
+
+faceMesh.onResults(res => {
+  if (res.multiFaceLandmarks) {
+    const p = res.multiFaceLandmarks[0][1];
+    const x = p.x * canvas.width;
+    const y = p.y * canvas.height;
+
+    // плавное слежение
+    textX += (x - textX) * 0.1;
+    textY += (y - textY) * 0.1;
+
+    if (!lastFace) beep.play();
+    lastFace = true;
+  } else {
+    lastFace = false;
+  }
+});
+
+// HANDS
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+hands.setOptions({ maxNumHands: 1 });
+
+let px = null, py = null;
+
+hands.onResults(res => {
+  if (res.multiHandLandmarks) {
+    const tip = res.multiHandLandmarks[0][8];
+    const x = tip.x * canvas.width;
+    const y = tip.y * canvas.height;
+
+    if (px !== null) {
+      ctx.strokeStyle = "lime";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+    px = x; py = y;
+  } else {
+    px = py = null;
+  }
+});
+
+// ЦИКЛ
+async function loop() {
+  ctx.font = "32px Arial";
+  ctx.fillStyle = "red";
+  if (lastFace) ctx.fillText("WH(вх)", textX, textY);
+
+  await faceMesh.send({ image: video });
+  await hands.send({ image: video });
+  requestAnimationFrame(loop);
+}
+
+// START
+document.getElementById('start').onclick = async () => {
+  await startCamera();
+  loop();
+};
+</script>
+
+</body>
+</html>
