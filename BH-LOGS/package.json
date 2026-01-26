@@ -1,4 +1,4 @@
-# Минимальный package.json
+
 cat > package.json << 'EOF'
 {
   "name": "bh-logs",
@@ -8,7 +8,7 @@ cat > package.json << 'EOF'
 }
 EOF
 
-# Просто создай папку dist с index.html
+
 mkdir -p dist
 cat > dist/index.html << 'EOF'
 <!DOCTYPE html>
