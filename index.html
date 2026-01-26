@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iOS Face Track + Draw</title>
+<title>iOS Face Tracking FIXED</title>
 
 <style>
 html, body {
   margin: 0;
   padding: 0;
-  overflow: hidden;
   background: black;
+  overflow: hidden;
 }
 video, canvas {
   position: fixed;
@@ -27,8 +27,8 @@ button {
   z-index: 10;
   top: 20px;
   left: 20px;
-  font-size: 16px;
   padding: 10px 14px;
+  font-size: 16px;
 }
 </style>
 </head>
@@ -49,7 +49,8 @@ const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-let drawX = null, drawY = null;
+let scaleX = 1;
+let scaleY = 1;
 
 // ---------- FACE ----------
 const faceMesh = new FaceMesh({
@@ -71,14 +72,16 @@ hands.setOptions({
   minTrackingConfidence: 0.7
 });
 
+let px = null, py = null;
+
 // ---------- FACE RESULT ----------
 faceMesh.onResults(res => {
   if (!res.multiFaceLandmarks) return;
 
   const lm = res.multiFaceLandmarks[0];
 
-  const xs = lm.map(p => p.x * canvas.width);
-  const ys = lm.map(p => p.y * canvas.height);
+  const xs = lm.map(p => p.x * video.videoWidth * scaleX);
+  const ys = lm.map(p => p.y * video.videoHeight * scaleY);
 
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
@@ -88,43 +91,41 @@ faceMesh.onResults(res => {
   const w = maxX - minX;
   const h = maxY - minY;
 
-  // красный квадрат
   ctx.strokeStyle = "red";
   ctx.lineWidth = 3;
   ctx.strokeRect(minX, minY, w, h);
 
-  // координаты
   ctx.fillStyle = "red";
   ctx.font = "16px monospace";
   ctx.fillText(
     `X:${minX.toFixed(0)} Y:${minY.toFixed(0)}`,
     minX,
-    minY - 8
+    minY - 6
   );
 });
 
 // ---------- HAND RESULT ----------
 hands.onResults(res => {
   if (!res.multiHandLandmarks) {
-    drawX = drawY = null;
+    px = py = null;
     return;
   }
 
-  const tip = res.multiHandLandmarks[0][8]; // указательный палец
-  const x = tip.x * canvas.width;
-  const y = tip.y * canvas.height;
+  const tip = res.multiHandLandmarks[0][8];
+  const x = tip.x * video.videoWidth * scaleX;
+  const y = tip.y * video.videoHeight * scaleY;
 
-  if (drawX !== null) {
+  if (px !== null) {
     ctx.strokeStyle = "lime";
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(drawX, drawY);
+    ctx.moveTo(px, py);
     ctx.lineTo(x, y);
     ctx.stroke();
   }
 
-  drawX = x;
-  drawY = y;
+  px = x;
+  py = y;
 });
 
 // ---------- START ----------
@@ -136,13 +137,16 @@ document.getElementById("start").onclick = async () => {
   video.srcObject = stream;
   await video.play();
 
-  // размеры ТОЛЬКО после старта видео
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  // canvas = размер экрана
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  // масштаб video → canvas
+  scaleX = canvas.width / video.videoWidth;
+  scaleY = canvas.height / video.videoHeight;
 
   const camera = new Camera(video, {
     onFrame: async () => {
-      // очищаем ТОЛЬКО поверх старого кадра
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       await faceMesh.send({ image: video });
       await hands.send({ image: video });
