@@ -3,157 +3,102 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iOS Face Tracking FIXED</title>
+<title>Mini App</title>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
 html, body {
   margin: 0;
-  padding: 0;
-  background: black;
+  width: 100%;
+  height: 100%;
+  background: #0b0b0f;
+  overflow: hidden;
+  font-family: Inter, sans-serif;
+  color: white;
+}
+
+.bg {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
 }
-video, canvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+
+.blob {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, #5865f2, transparent 70%);
+  opacity: 0.25;
+  animation: float 20s infinite linear;
 }
-video { z-index: 1; }
-canvas { z-index: 2; pointer-events: none; }
+
+.blob:nth-child(2) {
+  left: 60%;
+  top: 40%;
+  animation-duration: 26s;
+}
+
+@keyframes float {
+  from { transform: translateY(0) rotate(0deg); }
+  to { transform: translateY(-600px) rotate(360deg); }
+}
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  text-align: center;
+}
+
+h1 {
+  font-weight: 600;
+  margin-bottom: 24px;
+}
 
 button {
-  position: fixed;
-  z-index: 10;
-  top: 20px;
-  left: 20px;
-  padding: 10px 14px;
+  background: #2a7cff;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 22px;
   font-size: 16px;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 </style>
 </head>
 
 <body>
 
-<button id="start">▶ START</button>
+<div class="bg">
+  <div class="blob"></div>
+  <div class="blob"></div>
+</div>
 
-<video id="video" playsinline muted></video>
-<canvas id="canvas"></canvas>
+<div class="center">
+  <h1>Хотите обкончать?</h1>
 
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <button id="Да!">
+    <img src="https://telegram.org/img/t_logo.png" width="20">
+    ДА
+  </button>
+</div>
 
 <script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
 
-let scaleX = 1;
-let scaleY = 1;
-
-// ---------- FACE ----------
-const faceMesh = new FaceMesh({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
-});
-faceMesh.setOptions({
-  maxNumFaces: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.7
-});
-
-// ---------- HANDS ----------
-const hands = new Hands({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-});
-hands.setOptions({
-  maxNumHands: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.7
-});
-
-let px = null, py = null;
-
-// ---------- FACE RESULT ----------
-faceMesh.onResults(res => {
-  if (!res.multiFaceLandmarks) return;
-
-  const lm = res.multiFaceLandmarks[0];
-
-  const xs = lm.map(p => p.x * video.videoWidth * scaleX);
-  const ys = lm.map(p => p.y * video.videoHeight * scaleY);
-
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-
-  const w = maxX - minX;
-  const h = maxY - minY;
-
-  ctx.strokeStyle = "red";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(minX, minY, w, h);
-
-  ctx.fillStyle = "red";
-  ctx.font = "16px monospace";
-  ctx.fillText(
-    `X:${minX.toFixed(0)} Y:${minY.toFixed(0)}`,
-    minX,
-    minY - 6
-  );
-});
-
-// ---------- HAND RESULT ----------
-hands.onResults(res => {
-  if (!res.multiHandLandmarks) {
-    px = py = null;
-    return;
-  }
-
-  const tip = res.multiHandLandmarks[0][8];
-  const x = tip.x * video.videoWidth * scaleX;
-  const y = tip.y * video.videoHeight * scaleY;
-
-  if (px !== null) {
-    ctx.strokeStyle = "lime";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  }
-
-  px = x;
-  py = y;
-});
-
-// ---------- START ----------
-document.getElementById("start").onclick = async () => {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user" }
-  });
-
-  video.srcObject = stream;
-  await video.play();
-
-  // canvas = размер экрана
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-
-  // масштаб video → canvas
-  scaleX = canvas.width / video.videoWidth;
-  scaleY = canvas.height / video.videoHeight;
-
-  const camera = new Camera(video, {
-    onFrame: async () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      await faceMesh.send({ image: video });
-      await hands.send({ image: video });
-    }
-  });
-
-  camera.start();
+document.getElementById("go").onclick = () => {
+  tg.openLink("https://t.me/m/JJwA4_raMWQy");
 };
 </script>
 
