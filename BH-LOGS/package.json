@@ -1,0 +1,24 @@
+# В папке BH-LOGS создай package.json
+cd BH-LOGS
+cat > package.json << 'EOF'
+{
+  "name": "bh-logs",
+  "private": true,
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build"
+  },
+  "dependencies": {
+    "vue": "^2.6.14",
+    "vue-router": "^3.5.3",
+    "vue-cookies": "^1.7.4",
+    "axios": "^0.27.2",
+    "bootstrap": "^4.6.0",
+    "prismjs": "^1.27.0"
+  },
+  "devDependencies": {
+    "@vue/cli-service": "^4.5.19",
+    "vue-template-compiler": "^2.6.14"
+  }
+}
+EOF
