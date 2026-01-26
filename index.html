@@ -2,14 +2,14 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>WH iOS Camera</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AR Face + Draw iOS</title>
 
 <style>
 body {
   margin: 0;
-  background: black;
   overflow: hidden;
+  background: black;
 }
 video, canvas {
   position: absolute;
@@ -23,24 +23,16 @@ button {
   font-size: 16px;
 }
 #start { top: 20px; left: 20px; }
-#switch { top: 20px; right: 20px; }
-#save { bottom: 20px; left: 20px; }
 </style>
 </head>
 
 <body>
 
-<button id="start">▶ Камера</button>
-<button id="switch">🔁</button>
-<button id="save">💾</button>
-
+<button id="start">▶ START</button>
 <video id="video" playsinline></video>
 <canvas id="canvas"></canvas>
 
-<audio id="beep">
-  <source src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg">
-</audio>
-
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
@@ -48,104 +40,109 @@ button {
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-const beep = document.getElementById('beep');
 
-let facing = "user";
-let lastFace = null;
-let textX = 0, textY = 0;
-
-// КАМЕРА
-async function startCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: facing }
-  });
-  video.srcObject = stream;
-  await video.play();
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-}
-
-// ПЕРЕКЛЮЧЕНИЕ
-document.getElementById('switch').onclick = () => {
-  facing = facing === "user" ? "environment" : "user";
-  startCamera();
-};
-
-// СОХРАНЕНИЕ
-document.getElementById('save').onclick = () => {
-  const link = document.createElement('a');
-  link.download = 'wh.png';
-  link.href = canvas.toDataURL();
-  link.click();
-};
-
-// FACE MESH
+// ---------- FACE ----------
 const faceMesh = new FaceMesh({
   locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
 });
-faceMesh.setOptions({ maxNumFaces: 1 });
-
-faceMesh.onResults(res => {
-  if (res.multiFaceLandmarks) {
-    const p = res.multiFaceLandmarks[0][1];
-    const x = p.x * canvas.width;
-    const y = p.y * canvas.height;
-
-    // плавное слежение
-    textX += (x - textX) * 0.1;
-    textY += (y - textY) * 0.1;
-
-    if (!lastFace) beep.play();
-    lastFace = true;
-  } else {
-    lastFace = false;
-  }
+faceMesh.setOptions({
+  maxNumFaces: 1,
+  refineLandmarks: false,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
 });
 
-// HANDS
+// ---------- HANDS ----------
 const hands = new Hands({
   locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
 });
-hands.setOptions({ maxNumHands: 1 });
-
-let px = null, py = null;
-
-hands.onResults(res => {
-  if (res.multiHandLandmarks) {
-    const tip = res.multiHandLandmarks[0][8];
-    const x = tip.x * canvas.width;
-    const y = tip.y * canvas.height;
-
-    if (px !== null) {
-      ctx.strokeStyle = "lime";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
-    px = x; py = y;
-  } else {
-    px = py = null;
-  }
+hands.setOptions({
+  maxNumHands: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
 });
 
-// ЦИКЛ
-async function loop() {
-  ctx.font = "32px Arial";
+let drawX = null, drawY = null;
+
+// ---------- FACE RESULT ----------
+faceMesh.onResults(res => {
+  if (!res.multiFaceLandmarks) return;
+
+  const lm = res.multiFaceLandmarks[0];
+
+  // берем крайние точки лица
+  const xs = lm.map(p => p.x * canvas.width);
+  const ys = lm.map(p => p.y * canvas.height);
+
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  const w = maxX - minX;
+  const h = maxY - minY;
+
+  // красный квадрат
+  ctx.strokeStyle = "red";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(minX, minY, w, h);
+
+  // координаты
   ctx.fillStyle = "red";
-  if (lastFace) ctx.fillText("WH(вх)", textX, textY);
+  ctx.font = "16px monospace";
+  ctx.fillText(
+    `X:${minX.toFixed(0)} Y:${minY.toFixed(0)}`,
+    minX,
+    minY - 10
+  );
+});
 
-  await faceMesh.send({ image: video });
-  await hands.send({ image: video });
-  requestAnimationFrame(loop);
-}
+// ---------- HAND RESULT ----------
+hands.onResults(res => {
+  if (!res.multiHandLandmarks) {
+    drawX = drawY = null;
+    return;
+  }
 
-// START
-document.getElementById('start').onclick = async () => {
-  await startCamera();
-  loop();
+  const tip = res.multiHandLandmarks[0][8];
+  const x = tip.x * canvas.width;
+  const y = tip.y * canvas.height;
+
+  if (drawX !== null) {
+    ctx.strokeStyle = "lime";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(drawX, drawY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  }
+
+  drawX = x;
+  drawY = y;
+});
+
+// ---------- CAMERA ----------
+document.getElementById('start').onclick = () => {
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "user" }
+  }).then(stream => {
+    video.srcObject = stream;
+    video.play();
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const camera = new Camera(video, {
+      onFrame: async () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        await faceMesh.send({ image: video });
+        await hands.send({ image: video });
+      },
+      width: canvas.width,
+      height: canvas.height
+    });
+    camera.start();
+  });
 };
 </script>
 
