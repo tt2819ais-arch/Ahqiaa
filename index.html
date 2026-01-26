@@ -3,33 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AR Face + Draw iOS</title>
+<title>iOS Face Track + Draw</title>
 
 <style>
-body {
+html, body {
   margin: 0;
+  padding: 0;
   overflow: hidden;
   background: black;
 }
 video, canvas {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
+  width: 100vw;
+  height: 100vh;
 }
+video { z-index: 1; }
+canvas { z-index: 2; pointer-events: none; }
+
 button {
   position: fixed;
   z-index: 10;
-  padding: 10px 14px;
+  top: 20px;
+  left: 20px;
   font-size: 16px;
+  padding: 10px 14px;
 }
-#start { top: 20px; left: 20px; }
 </style>
 </head>
 
 <body>
 
 <button id="start">▶ START</button>
-<video id="video" playsinline></video>
+
+<video id="video" playsinline muted></video>
 <canvas id="canvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -37,9 +45,11 @@ button {
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
 <script>
-const video = document.getElementById('video');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let drawX = null, drawY = null;
 
 // ---------- FACE ----------
 const faceMesh = new FaceMesh({
@@ -47,7 +57,6 @@ const faceMesh = new FaceMesh({
 });
 faceMesh.setOptions({
   maxNumFaces: 1,
-  refineLandmarks: false,
   minDetectionConfidence: 0.7,
   minTrackingConfidence: 0.7
 });
@@ -62,15 +71,12 @@ hands.setOptions({
   minTrackingConfidence: 0.7
 });
 
-let drawX = null, drawY = null;
-
 // ---------- FACE RESULT ----------
 faceMesh.onResults(res => {
   if (!res.multiFaceLandmarks) return;
 
   const lm = res.multiFaceLandmarks[0];
 
-  // берем крайние точки лица
   const xs = lm.map(p => p.x * canvas.width);
   const ys = lm.map(p => p.y * canvas.height);
 
@@ -93,7 +99,7 @@ faceMesh.onResults(res => {
   ctx.fillText(
     `X:${minX.toFixed(0)} Y:${minY.toFixed(0)}`,
     minX,
-    minY - 10
+    minY - 8
   );
 });
 
@@ -104,7 +110,7 @@ hands.onResults(res => {
     return;
   }
 
-  const tip = res.multiHandLandmarks[0][8];
+  const tip = res.multiHandLandmarks[0][8]; // указательный палец
   const x = tip.x * canvas.width;
   const y = tip.y * canvas.height;
 
@@ -121,28 +127,29 @@ hands.onResults(res => {
   drawY = y;
 });
 
-// ---------- CAMERA ----------
-document.getElementById('start').onclick = () => {
-  navigator.mediaDevices.getUserMedia({
+// ---------- START ----------
+document.getElementById("start").onclick = async () => {
+  const stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: "user" }
-  }).then(stream => {
-    video.srcObject = stream;
-    video.play();
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    const camera = new Camera(video, {
-      onFrame: async () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        await faceMesh.send({ image: video });
-        await hands.send({ image: video });
-      },
-      width: canvas.width,
-      height: canvas.height
-    });
-    camera.start();
   });
+
+  video.srcObject = stream;
+  await video.play();
+
+  // размеры ТОЛЬКО после старта видео
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const camera = new Camera(video, {
+    onFrame: async () => {
+      // очищаем ТОЛЬКО поверх старого кадра
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      await faceMesh.send({ image: video });
+      await hands.send({ image: video });
+    }
+  });
+
+  camera.start();
 };
 </script>
 
