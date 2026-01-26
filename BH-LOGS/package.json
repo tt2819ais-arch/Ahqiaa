@@ -1,5 +1,6 @@
-# В папке BH-LOGS создай package.json
 cd BH-LOGS
+rm package.json  
+
 cat > package.json << 'EOF'
 {
   "name": "bh-logs",
