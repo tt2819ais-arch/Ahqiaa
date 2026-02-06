@@ -1,1 +1,19 @@
-
+{
+  "sources": [
+    {
+      "name": "AltStore RUS",
+      "url": "https://raw.githubusercontent.com/vizunchik/AltStoreRus/master/apps.json",
+      "type": "altstore"
+    },
+    {
+      "name": "Cypwn Repository",
+      "url": "https://ipa.cypwn.xyz/cypwn.json",
+      "type": "custom"
+    },
+    {
+      "name": "GBox Public",
+      "url": "https://gbox.run/Public/Source.json",
+      "type": "gbox"
+    }
+  ]
+}
